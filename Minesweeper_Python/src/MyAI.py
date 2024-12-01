@@ -2,195 +2,217 @@ from AI import AI
 from Action import Action
 import random
 
-class MyAI(AI):
+class MyAI( AI ):
+	def __init__(self, rowDimension, colDimension, totalMines, startX, startY):
+		########################################################################
+		#							YOUR CODE BEGINS						   #
+		########################################################################
+		##basic setting up board stuff
+		self.rows = colDimension
+		self.cols = rowDimension
+		self.mineCount = totalMines
+		self.x = startX
+		self.y = startY
+		#have a set for all the flagged mines and a set of all tiles already unconvered. The board is none for all tiles in the beginning using a 2d array.
+		self.flagged =set()
+		self.board = [[None for y in range(self.cols)] for x in range(self.rows)]
+		self.uncovered = set()
+		##create a list of the x,y coordinates for all tiles that have not been explored. So essentially, self.next_moves is all the tiles that have not yet been uncovered. 
+		self.next_moves = [(x,y) for y in range(self.cols) for x in range(self.rows)]
 
-    def __init__(self, rowDimension, colDimension, totalMines, startX, startY):
-        self.boardY = rowDimension
-        self.boardX = colDimension
-        self.totalM = totalMines
-        self.startX = startX
-        self.startY = startY
-        self.board = [[' ' for _ in range(colDimension)]
-                      for _ in range(rowDimension)]
-        self.actions = -1
-        self.currentx = startX
-        self.currenty = startY
-        self.safe = set()
-        self.dangerous = set()
-        self.flags = set()
-        self.numdict = dict()
-        for i in range(1, 9):
-            self.numdict[i] = set()
-        self.done = set()
-        self.numtriple = list()
-        self.toflag = set()
+		# initializing the starting spot so i set the tile to be 0 for the board and remove it from next_moves and add it to the uncovered array as a tuple of it's (x,y)
+		if(0 <= self.x < self.rows and 0 <= self.y < self.cols):
+			self.board[self.x][self.y] = 0
+			self.uncovered.add((self.x,self.y))
+			self.next_moves.remove((self.x, self.y))
+		
+		#queue for all the next actions
+		self.actions_queue = []  
+		########################################################################
+		#							YOUR CODE ENDS							   #
+		########################################################################
 
-    def getAction(self, number: int) -> "Action Object":
-        if len(self.flags) == self.totalM:
-            return Action(AI.Action.LEAVE, 0, 0)
+		
+	def getAction(self, number: int) -> "Action Object":
 
-        self.actions += 1
+		########################################################################
+		#							YOUR CODE BEGINS						   #
+		########################################################################
 
-        if self.actions == 0:
-            self.currentx = self.startX
-            self.currenty = self.startY
-            self.board[self.currenty][self.currentx] = '0'
-            self.addsafeneighbors(self.startX, self.startY)
-            return Action(AI.Action.UNCOVER, self.startX, self.startY)
+		#maing sure that it is not already explored. 
+		if (self.x, self.y) not in self.uncovered:
+			if 0 <= self.x < self.rows and 0 <= self.y < self.cols:
+				#removing from queue so u don't explore again.
+				if( (self.x ,self.y) in self.actions_queue):
+					self.actions_queue.remove((self.x, self.y))
+				#setting the board, removing it from the list of remaining tiles, and adding it to the explored tiles. 
+				self.board[self.x][self.y] = number
+				self.next_moves.remove((self.x, self.y))
+				self.uncovered.add((self.x, self.y)) 
 
-        if (self.board[self.currenty][self.currentx] != f'{number}') and (self.board[self.currenty][self.currentx] != f'-1'):
-            self.board[self.currenty][self.currentx] = f'{number}'
+		#base case
+		if number == 0:
+			#sets all of the tiles that have not been set as safe as safe tiles and adding them into queue to uncover. 
+					self.mark_safe(self.x, self.y)
+					#if tiles were added, then explore them to get all of the 0 tiles out of the way. Essentially, I explore all safe tiles first 
+					if self.actions_queue:
+						nx, ny = self.actions_queue.pop(0)
+						if(0 <= nx < self.rows and 0 <= ny < self.cols):
+							self.x, self.y = nx, ny
+							return Action(AI.Action.UNCOVER, nx, ny)
+					else:
+						#check if we have completed board. 
+						if len(self.next_moves) + len(self.flagged) == self.mineCount:
+							return Action(AI.Action.LEAVE)
 
-        if number != 0:
-            if number == -1:
-                self.flags.add((self.currentx, self.currenty))
-            elif (self.currentx, self.currenty) not in self.done:
-                self.numtriple.append((number, self.currentx, self.currenty))
-                self.numtriple = sorted(self.numtriple, key=lambda x: x[0])
+		#check for flag if so, then go to next action in queue
+		if number == -1:
+			#add to flag.
+			self.flagged.add((self.x, self.y))
+			if self.actions_queue:
+				x1, y1 = self.actions_queue.pop(0)
+				if(0 <= self.x < self.rows and 0 <= self.y < self.cols):
+					self.x, self.y = x1, y1
+					return Action(AI.Action.UNCOVER, x1, y1)
+			else:
+				#check if leave
+				if len(self.next_moves) + len(self.flagged) == self.mineCount:
+					return Action(AI.Action.LEAVE)
+				#might be redundant but i still check. 
+				if self.actions_queue:
+					x1, y1 = self.actions_queue.pop(0)
+					if(0 <= self.x < self.rows and 0 <= self.y < self.cols):
+						self.x, self.y = x1, y1
+						return Action(AI.Action.UNCOVER, x1, y1)
 
-        if number == 0:
-            self.addsafeneighbors(self.currentx, self.currenty)
-        elif number >= 1:
-            self.adddangerousneighbors(self.currentx, self.currenty)
+				#here is a basic checking for when you know a tile is safe and a tile is a mine. This doesn't implement patterns yet. It does basic checking for each of the unexplored tiles. 
+				#essentially, it checks if the flagged count and the amount of tiles that are unexplored is equal to the hint count, then it is a potential mine but if the flag count is equal to the hint
+				#then it is a safe tile. 
+				for (x,y) in self.next_moves:
+					safe = False
+					potential_mine = False
+					for (x1, y1) in self.neighbors(x,y):
+						if isinstance(self.board[x1][y1], int):  
+							hint = self.board[x1][y1]
+							neighbors = self.neighbors(x1, y1)
 
-        # Uncover safe cells
-        while self.safe:
-            x, y = self.safe.pop()
-            # Ensure the cell is not flagged or uncovered already
-            if self.board[y][x] == ' ':
-                self.currentx, self.currenty = x, y
-                return Action(AI.Action.UNCOVER, x, y)
+							flagged_count = sum(1 for (x2, y2) in neighbors if self.board[x2][y2] == -1)
+							covered_count = sum(1 for (x2, y2) in neighbors if self.board[x2][y2] == None)
 
-        # Flag the dangerous cells
-        while self.toflag:
-            x, y = self.toflag.pop()
-            # Ensure the cell is not flagged or uncovered already
-            if self.board[y][x] == ' ':
-                self.currentx, self.currenty = x, y
-                self.flags.add((x, y))
-                return Action(AI.Action.FLAG, x, y)
+							if flagged_count + covered_count == hint:
+								potential_mine = True
+							elif flagged_count == hint:
+								safe = True
 
-        loop_count = 0
-        while self.numtriple:
-            i, x, y = self.numtriple.pop(0)
-            empty, emptyset, flags, flagset = self.countflagsempty(x, y)
-            self.done.add((x, y))
-            if (empty == i) and (flags == 0):
-                while emptyset:
-                    qx, qy = emptyset.pop()
-                    if self.board[qy][qx] == ' ':
-                        self.toflag.add((qx, qy))
-                fx, fy = self.toflag.pop()
-                self.currentx = fx
-                self.currenty = fy
-                self.flags.add((fx, fy))
-                return Action(AI.Action.FLAG, fx, fy)
-            elif (empty > 0) and (flags == i):
-                while emptyset:
-                    qx, qy = emptyset.pop()
-                    if self.board[qy][qx] == ' ':
-                        self.safe.add((qx, qy))
-                fx, fy = self.safe.pop()
-                self.currentx = fx
-                self.currenty = fy
-                return Action(AI.Action.UNCOVER, fx, fy)
-            elif (flags + empty == i) and empty > 0:
-                while emptyset:
-                    qx, qy = emptyset.pop()
-                    if self.board[qy][qx] == ' ':
-                        self.toflag.add((qx, qy))
-                fx, fy = self.toflag.pop()
-                self.currentx = fx
-                self.currenty = fy
-                self.flags.add((fx, fy))
-                return Action(AI.Action.FLAG, fx, fy)
-            elif loop_count == 64:
-                probabilities = self.calculateprobabilities()
-                min_prob_cell = min(probabilities, key=probabilities.get)
-                self.currentx, self.currenty = min_prob_cell
-                return Action(AI.Action.UNCOVER, self.currentx, self.currenty)
-            else:
-                self.numtriple.append((i, x, y))
-                self.numtriple = sorted(self.numtriple, key=lambda x: x[0])
-                loop_count += 1
-        return Action(AI.Action.LEAVE, 0, 0)
+					if safe:
+						self.actions_queue.insert(0, (x, y))
+					elif potential_mine:
+						if((x,y) not in self.actions_queue):
+							self.x, self.y = x, y
+							return Action(AI.Action.FLAG, x, y)
+						
+		#checking for if there is a number other than 0 or -1, this code is kind of redundant. Can put into separate function but i just never did. Also checking for if i found a safe tile from the 
+		#code above
+		if self.actions_queue:
+			nx, ny = self.actions_queue.pop(0)
+			if(0 <= nx < self.rows and 0 <= ny < self.cols):
+				self.x, self.y = nx, ny
+				return Action(AI.Action.UNCOVER, nx, ny)
+		
+		#check if can leave. 
+		if len(self.next_moves) + len(self.flagged) == self.mineCount:
+			return Action(AI.Action.LEAVE)
+		
+		#here is a basic checking for when you know a tile is safe and a tile is a mine. This doesn't implement patterns yet. It does basic checking for each of the unexplored tiles. 
+		#essentially, it checks if the flagged count and the amount of tiles that are unexplored is equal to the hint count, then it is a potential mine but if the flag count is equal to the hint
+		#then it is a safe tile. also redundant code
+		for (x,y) in self.next_moves:
+			safe = False
+			potential_mine = False
+			for (x1, y1) in self.neighbors(x,y):
+				if isinstance(self.board[x1][y1], int):  
+					hint = self.board[x1][y1]
+					neighbors = self.neighbors(x1, y1)
 
-    def printboard(self):
-        bottom = len(self.board) - 1
-        while bottom >= 0:
-            print(f'{bottom} {self.board[bottom]}'.replace('-1', '?').replace('\'', ''))
-            bottom -= 1
-        for i in range(len(self.board[0])):
-            print(f'  {i}', end="")
-        print('')
+					flagged_count = sum(1 for (x2, y2) in neighbors if self.board[x2][y2] == -1)
+					covered_count = sum(1 for (x2, y2) in neighbors if self.board[x2][y2] == None)
 
-    def addsafeneighbors(self, x, y):
-        for dx in [-1, 0, 1]:
-            for dy in [-1, 0, 1]:
-                if (dx == 0 and dy == 0):
-                    continue
-                nx, ny = x + dx, y + dy
-                if 0 <= nx < self.boardX and 0 <= ny < self.boardY:
-                    if self.board[ny][nx] == ' ':
-                        self.safe.add((nx, ny))
+					if flagged_count + covered_count == hint:
+						potential_mine = True
+					elif flagged_count == hint:
+						safe = True
+			if safe:
+				self.actions_queue.insert(0, (x, y))
+			elif potential_mine:
+				if((x,y) not in self.actions_queue):
+					self.x, self.y = x, y
+					return Action(AI.Action.FLAG, x, y)
 
-    def adddangerousneighbors(self, x, y):
-        for dx in [-1, 0, 1]:
-            for dy in [-1, 0, 1]:
-                if dx == 0 and dy == 0:
-                    continue
-                nx, ny = x + dx, y + dy
-                if 0 <= nx < self.boardX and 0 <= ny < self.boardY:
-                    if self.board[ny][nx] == ' ':
-                        if self.board[y][x] != ' ' and self.board[y][x] != '-1' and int(self.board[y][x]) > 0:
-                            self.dangerous.add((nx, ny))
-                    elif (nx, ny) in self.dangerous and self.board[ny][nx] != ' ':
-                        self.dangerous.remove((nx, ny))
+		#checking for after i did the code above to see if any other tile was potentially safe
+		if self.actions_queue:
+			nx, ny = self.actions_queue.pop(0)
+			if(0 <= nx < self.rows and 0 <= ny < self.cols):
+				self.x, self.y = nx, ny
+				return Action(AI.Action.UNCOVER, nx, ny)
+		
+		##THE PART BELOW IS THE MAIN PART WE NEED TO CHANGE. I BELIEVE THE REST ABOVE SHOULD BE ALRIGHT FROM WHEN I RAN THE BOARDS AS THEY ONLY FAIL ONCE ALL ELSE ABOVE HAS BEEN RAN THROUGH AND IT 
+		# NEEDS TO SOMEHOW PICK A TILE RANDOMLY. 
+		#if all else fails, that is when we want to implement patterns in the self.score function. So far, i have just used some random heuristic i made up by running a couple of boards but 
+		#probably going to change that function to just be patterns first. 
+		if self.next_moves:
+			#so far i know that if it is 1 2 x, then that x will always have a mine either above or below. 
+			
+			next_x, next_y = self.score(self.next_moves)
+			if(0 <= self.x < self.rows and 0 <= self.y < self.cols):
+				self.x, self.y = next_x, next_y
+				return Action(AI.Action.UNCOVER, next_x, next_y)
 
-    def countflagsempty(self, x, y):
-        empty = 0
-        flags = 0
-        emptyset = set()
-        flagset = set()
-        for dx in [-1, 0, 1]:
-            for dy in [-1, 0, 1]:
-                if (dx == 0 and dy == 0) or not (0 <= x + dx < self.boardX and 0 <= y + dy < self.boardY):
-                    continue
-                elif self.board[y + dy][x + dx] == ' ':
-                    empty += 1
-                    emptyset.add((x+dx, y+dy))
-                elif self.board[y + dy][x + dx] == '-1':
-                    flags += 1
-                    flagset.add((x+dx, y+dy))
-        return empty, emptyset, flags, flagset
+		#if no more action, then leave.
+		return Action(AI.Action.LEAVE)
 
-    def calculateprobabilities(self):
-        probabilities = {}
-        flagsleft = self.totalM - len(self.flags)
-        for y in range(self.boardY):
-            for x in range(self.boardX):
-                if self.board[y][x] == ' ':
-                    probabilities[(x, y)] = self.calculateprobabilitycell(x, y, flagsleft)
-        return probabilities
+	#gets all neighbors to a coordinate
+	def neighbors(self, x, y):
+		neighbors = []
+		for x1 in range(-1,2):
+			for y1 in range(-1,2):
+				x2, y2 = x + x1, y + y1
+				if 0 <= x2 < self.rows and 0 <= y2 < self.cols:
+					if(x1 == 0 and y1 == 0):
+						continue
+					neighbors.append((x2, y2))
+		return neighbors
 
-    def calculateprobabilitycell(self, x, y, flagsleft):
-        surroundingnumbers = 0
-        clues = []
-        for dx in [-1, 0, 1]:
-            for dy in [-1, 0, 1]:
-                if (dx == 0 and dy == 0) or not (0 <= x + dx < self.boardX and 0 <= y + dy < self.boardY):
-                    continue
-                if self.board[y + dy][x + dx].isdigit():
-                    num = int(self.board[y + dy][x + dx])
-                    surroundingnumbers += 1
-                    clues.append((num, x + dx, y + dy))
-        if surroundingnumbers == 0:
-            return 1.0  # maximum probability if there are no neighboring clues
-        probsum = 0
-        for num, cx, cy in clues:
-            empty, emptyset, flags, flagset = self.countflagsempty(cx, cy)
-            remainingmines = num - flags
-            if empty > 0:
-                probsum += remainingmines / empty
-        return probsum / len(clues) if clues else 1.0
+#change this function.
+	def score(self, list):
+		#uses a random heuristic but doesn't get too far, should do patterns instead. We should start off with 1 2 C, essentially, for 1 2 C, the one above or below the C will be the mine. 
+		#from what i know we can get pretty far off that. 
+		moves_count = {}
+		for i in list:
+			neighbors = self.neighbors(i[0], i[1])
+			moves_count[(i[0], i[1])] = (sum([self.board[z[0]][z[1]] for z in neighbors if self.board[z[0]][z[1]] is not None and self.board[z[0]][z[1]] > 0]), len([z for z in neighbors if self.board[z[0]][z[1]] is None or self.board[z[0]][z[1]] == 0]))
+		minimum = None
+		for key, value in moves_count.items():
+			if minimum == None:
+				minimum = key
+			if value[0] == moves_count[minimum][0]:
+				if value[1] > moves_count[minimum][1]:
+					minimum = key
+			if value[0] < moves_count[minimum][0]:
+				minimum = key
+		return minimum 
 
+	def mark_safe(self, x, y):
+		#marks all the surrounding mines to that coordinate as safe. If one of the surrounding coordinates was flagged already, but we know that it is safe because one of it's neighbors is 0, then 
+		#we can now set remove a flag from it and add it back into the queue. 
+		for (x1, y1) in self.neighbors(x, y):
+			if self.board[x1][y1] is None and (x1, y1) not in self.actions_queue:
+				self.actions_queue.insert(0, (x1, y1))	
+			elif self.board[x1][y1] == -1:
+				self.flagged.remove((x1,y1))
+				self.next_moves.append((x1,y1))
+				self.uncovered.remove((x1,y1))
+				self.board[x1][y1] = None
+				self.actions_queue.insert(0,(x1,y1))
+		########################################################################
+		#							YOUR CODE ENDS							   #
+		########################################################################
