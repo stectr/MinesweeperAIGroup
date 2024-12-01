@@ -1,6 +1,21 @@
+# ==============================CS-199==================================
+# FILE:			MyAI.py
+#
+# AUTHOR: 		Justin Chung
+#
+# DESCRIPTION:	This file contains the MyAI class. You will implement your
+#				agent in this file. You will write the 'getAction' function,
+#				the constructor, and any additional helper functions.
+#
+# NOTES: 		- MyAI inherits from the abstract AI class in AI.py.
+#
+#				- DO NOT MAKE CHANGES TO THIS FILE.
+# ==============================CS-199==================================
+
+import random
 from AI import AI
 from Action import Action
-import random
+
 
 class MyAI( AI ):
 	def __init__(self, rowDimension, colDimension, totalMines, startX, startY):
@@ -28,6 +43,7 @@ class MyAI( AI ):
 		
 		#queue for all the next actions
 		self.actions_queue = []  
+		self.flags_queue = []
 		########################################################################
 		#							YOUR CODE ENDS							   #
 		########################################################################
@@ -113,6 +129,11 @@ class MyAI( AI ):
 						
 		#checking for if there is a number other than 0 or -1, this code is kind of redundant. Can put into separate function but i just never did. Also checking for if i found a safe tile from the 
 		#code above
+		if self.flags_queue:
+			nx, ny = self.flags_queue.pop(0)
+			self.x, self.y = nx, ny
+			return Action(AI.Action.FLAG, nx, ny)
+			
 		if self.actions_queue:
 			nx, ny = self.actions_queue.pop(0)
 			if(0 <= nx < self.rows and 0 <= ny < self.cols):
@@ -159,10 +180,41 @@ class MyAI( AI ):
 		# NEEDS TO SOMEHOW PICK A TILE RANDOMLY. 
 		#if all else fails, that is when we want to implement patterns in the self.score function. So far, i have just used some random heuristic i made up by running a couple of boards but 
 		#probably going to change that function to just be patterns first. 
+
+		#1-1 implemented
+		for (x,y) in self.next_moves:
+			for (x1, y1) in self.explored_neighbors(x,y):
+				una = {(i, j) for (i,j) in self.neighbors(x1, y1) if self.board[i][j] == None}
+				unaf = sum(1 for (i, j) in self.neighbors(x1, y1) if self.board[i][j] == -1)
+				if self.board[x1][y1] > 0:
+					for (x2, y2) in self.explored_neighbors(x1, y1):
+						if self.board[x2][y2] > 0:
+							unb = {(i, j) for (i,j) in self.neighbors(x2, y2) if self.board[i][j] == None}
+							unbf = sum(1 for (i, j) in self.neighbors(x2, y2) if self.board[i][j] == -1)
+							unab = una - unb
+							if unab:
+								if unb.issubset(una):
+									if self.board[x1][y1] - unaf == self.board[x2][y2] - unbf:
+										for (i, j) in unab:
+											self.actions_queue.insert(0, (i,j))
+									elif self.board[x1][y1] - unaf == self.board[x2][y2] - unbf + len(unab):
+										for (i,j) in unab:
+											self.flags_queue.insert(0, (i,j))
+											
+		if self.flags_queue:
+			nx, ny = self.flags_queue.pop(0)
+			self.x, self.y = nx, ny
+			return Action(AI.Action.FLAG, nx, ny)
+
+		if self.actions_queue:
+			nx, ny = self.actions_queue.pop(0)
+			if(0 <= nx < self.rows and 0 <= ny < self.cols):
+				self.x, self.y = nx, ny
+				return Action(AI.Action.UNCOVER, nx, ny)
 		if self.next_moves:
 			#so far i know that if it is 1 2 x, then that x will always have a mine either above or below. 
 			
-			next_x, next_y = self.score(self.next_moves)
+			next_x, next_y = random.choice(self.next_moves)
 			if(0 <= self.x < self.rows and 0 <= self.y < self.cols):
 				self.x, self.y = next_x, next_y
 				return Action(AI.Action.UNCOVER, next_x, next_y)
@@ -180,6 +232,19 @@ class MyAI( AI ):
 					if(x1 == 0 and y1 == 0):
 						continue
 					neighbors.append((x2, y2))
+		return neighbors
+
+	#gets all uncovered neighbors
+	def explored_neighbors(self, x, y):
+		neighbors = []
+		for x1 in range(-1,2):
+			for y1 in range(-1,2):
+				x2, y2 = x + x1, y + y1
+				if 0 <= x2 < self.rows and 0 <= y2 < self.cols:
+					if(x1 == 0 and y1 == 0):
+						continue
+					if (x2, y2) in self.uncovered:
+						neighbors.append((x2, y2))
 		return neighbors
 
 #change this function.
@@ -213,6 +278,3 @@ class MyAI( AI ):
 				self.uncovered.remove((x1,y1))
 				self.board[x1][y1] = None
 				self.actions_queue.insert(0,(x1,y1))
-		########################################################################
-		#							YOUR CODE ENDS							   #
-		########################################################################
